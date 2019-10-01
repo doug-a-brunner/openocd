@@ -974,7 +974,7 @@ COMMAND_HANDLER(efr32x_handle_debuglock_command)
 		return retval;
 	}
 
-	command_print(CMD_CTX, "efr32x debug interface locked, reset the device to apply");
+	command_print(cmd, "efr32x debug interface locked, reset the device to apply");
 
 	return ERROR_OK;
 }
