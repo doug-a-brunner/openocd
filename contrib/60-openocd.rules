@@ -17,6 +17,9 @@ SUBSYSTEM!="usb|tty|hidraw", GOTO="openocd_rules_end"
 # opendous and estick
 ATTRS{idVendor}=="03eb", ATTRS{idProduct}=="204f", MODE="666"
 
+# Puffco Omniface
+ATTRS{idVendor}=="0403", ATTRS{idProduct}=="0420", MODE="666"
+
 # Original FT232/FT245 VID:PID
 ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6001", MODE="666"
 
