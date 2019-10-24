@@ -1014,4 +1014,5 @@ struct flash_driver efr32_flash = {
 	.erase_check = default_flash_blank_check,
 	.protect_check = efr32x_protect_check,
 	.info = get_efr32x_info,
+	.free_driver_priv = default_flash_free_driver_priv,
 };
