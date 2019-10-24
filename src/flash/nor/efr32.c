@@ -49,6 +49,8 @@
 /* size in bytes, not words; must fit all Gecko devices */
 #define LOCKBITS_PAGE_SZ                512
 
+#define EFR32_REGULAR_FLASH_BASE		0
+
 #define EFR32_MSC_INFO_BASE             0x0fe00000
 
 #define EFR32_MSC_USER_DATA             EFR32_MSC_INFO_BASE
@@ -330,6 +332,7 @@ static int efr32x_erase_page(struct flash_bank *bank, uint32_t addr)
 	 */
 	int ret = 0;
 	uint32_t status = 0;
+	addr += bank->base;
 
 	LOG_DEBUG("erasing flash page at 0x%08" PRIx32, addr);
 
@@ -466,10 +469,25 @@ static int efr32x_write_lock_data(struct flash_bank *bank)
 static int efr32x_get_page_lock(struct flash_bank *bank, size_t page)
 {
 	struct efr32x_flash_bank *efr32x_info = bank->driver_priv;
-	uint32_t dw = efr32x_info->lb_page[page >> 5];
+
+	uint32_t dw = 0;
 	uint32_t mask = 0;
 
-	mask = 1 << (page & 0x1f);
+	if (bank->base == EFR32_REGULAR_FLASH_BASE) {
+		dw = efr32x_info->lb_page[page >> 5];
+		mask = 1 << (page & 0x1f);
+	}
+	else if (bank->base == EFR32_MSC_USER_DATA) {
+		dw = efr32x_info->lb_page[126];
+		mask = 0x01;
+	}
+	else if (bank->base == EFR32_MSC_LOCK_BITS) {
+		dw = efr32x_info->lb_page[126];
+		mask = 0x02;
+	}
+	else {
+		return 0; // we don't know what to do about locking this page
+	}
 
 	return (dw & mask) ? 0 : 1;
 }
@@ -477,10 +495,28 @@ static int efr32x_get_page_lock(struct flash_bank *bank, size_t page)
 static int efr32x_set_page_lock(struct flash_bank *bank, size_t page, int set)
 {
 	struct efr32x_flash_bank *efr32x_info = bank->driver_priv;
-	uint32_t *dw = &efr32x_info->lb_page[page >> 5];
+
+	uint32_t *dw = NULL;
 	uint32_t mask = 0;
 
-	mask = 1 << (page & 0x1f);
+	if (bank->base == EFR32_REGULAR_FLASH_BASE) {
+		dw = &efr32x_info->lb_page[page >> 5];
+		mask = 1 << (page & 0x1f);
+	}
+	else if (bank->base == EFR32_MSC_USER_DATA) {
+		dw = &efr32x_info->lb_page[126];
+		mask = 0x01;
+	}
+	else if (bank->base == EFR32_MSC_LOCK_BITS) {
+		dw = &efr32x_info->lb_page[126];
+		mask = 0x02;
+	}
+	else {
+		if (set == 0)
+			return ERROR_OK;
+		LOG_ERROR("Locking page in bank at 0x%08" PRIx32 " is not supported", (uint32_t)(bank->base));
+			return ERROR_FLASH_OPER_UNSUPPORTED;
+	}
 
 	if (!set)
 		*dw |= mask;
@@ -770,25 +806,28 @@ static int efr32x_write(struct flash_bank *bank, const uint8_t *buffer,
 		return ERROR_TARGET_NOT_HALTED;
 	}
 
-	if (offset & 0x3) {
-		LOG_ERROR("offset 0x%" PRIx32 " breaks required 4-byte "
-			"alignment", offset);
-		return ERROR_FLASH_DST_BREAKS_ALIGNMENT;
-	}
-
-	if (count & 0x3) {
+	if (offset & 0x3 || count & 0x3) {
+		uint32_t old_offset = offset;
+		offset = old_offset & ~0x3;
 		uint32_t old_count = count;
-		count = (old_count | 3) + 1;
+		uint32_t head_padding_bytes = old_offset - offset;
+		count = old_count + head_padding_bytes;
+		if (count & 0x3)
+			count = (count | 3) + 1; // and now tail padding
 		new_buffer = malloc(count);
 		if (new_buffer == NULL) {
-			LOG_ERROR("odd number of bytes to write and no memory "
-				"for padding buffer");
+			LOG_ERROR("unaligned data to write and no memory for padding buffer");
 			return ERROR_FAIL;
 		}
-		LOG_INFO("odd number of bytes to write (%" PRIu32 "), extending to %" PRIu32 " "
-			"and padding with 0xff", old_count, count);
+		LOG_INFO("unaligned bytes to write at sector offset range "
+			"0x%" PRIx32 "-0x%" PRIx32 ", "
+			"extending to 0x%" PRIx32 "-0x%" PRIx32 " "
+			"and padding with 0xff",
+			old_offset, old_offset + old_count - 1,
+			offset, offset + count - 1);
 		memset(new_buffer, 0xff, count);
-		buffer = memcpy(new_buffer, buffer, old_count);
+		memcpy(new_buffer + head_padding_bytes, buffer, old_count);
+		buffer = new_buffer;
 	}
 
 	uint32_t words_remaining = count / 4;
@@ -842,7 +881,6 @@ static int efr32x_probe(struct flash_bank *bank)
 	struct efr32_info efr32_mcu_info;
 	int ret;
 	int i;
-	uint32_t base_address = 0x00000000;
 	char buf[256];
 
 	efr32x_info->probed = 0;
@@ -864,6 +902,9 @@ static int efr32x_probe(struct flash_bank *bank)
 
 	int num_pages = efr32_mcu_info.flash_sz_kib * 1024 /
 		efr32_mcu_info.page_size;
+	
+	if (bank->size > 0) // user is specifying a bank
+		num_pages = (bank->size + efr32_mcu_info.page_size - 1) / efr32_mcu_info.page_size;
 
 	assert(num_pages > 0);
 
@@ -872,7 +913,6 @@ static int efr32x_probe(struct flash_bank *bank)
 		bank->sectors = NULL;
 	}
 
-	bank->base = base_address;
 	bank->size = (num_pages * efr32_mcu_info.page_size);
 	bank->num_sectors = num_pages;
 
