@@ -368,10 +368,10 @@ static int efr32x_erase_page(struct flash_bank *bank, uint32_t addr)
 		EFR32_MSC_STATUS_BUSY_MASK, 0);
 }
 
-static int efr32x_erase(struct flash_bank *bank, int first, int last)
+static int efr32x_erase(struct flash_bank *bank, unsigned int first, unsigned int last)
 {
 	struct target *target = bank->target;
-	int i = 0;
+	unsigned int i = 0;
 	int ret = 0;
 
 	if (TARGET_HALTED != target->state) {
@@ -526,10 +526,10 @@ static int efr32x_set_page_lock(struct flash_bank *bank, size_t page, int set)
 	return ERROR_OK;
 }
 
-static int efr32x_protect(struct flash_bank *bank, int set, int first, int last)
+static int efr32x_protect(struct flash_bank *bank, int set, unsigned int first, unsigned int last)
 {
 	struct target *target = bank->target;
-	int i = 0;
+	unsigned int i = 0;
 	int ret = 0;
 
 	if (!set) {
@@ -948,7 +948,7 @@ static int efr32x_protect_check(struct flash_bank *bank)
 {
 	struct target *target = bank->target;
 	int ret = 0;
-	int i = 0;
+	unsigned int i = 0;
 
 	if (target->state != TARGET_HALTED) {
 		LOG_ERROR("Target not halted");
