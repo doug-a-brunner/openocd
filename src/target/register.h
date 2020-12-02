@@ -134,6 +134,8 @@ struct reg {
 	bool valid;
 	/* When false, the register doesn't actually exist in the target. */
 	bool exist;
+	/* Hide the register from gdb and omit it in 'reg' cmd output */
+	bool hidden;
 	/* Size of the register in bits. */
 	uint32_t size;
 	/* Used for generating XML description of registers. Can be set to NULL for
@@ -159,6 +161,8 @@ struct reg_arch_type {
 	int (*set)(struct reg *reg, uint8_t *buf);
 };
 
+struct reg *register_get_by_number(struct reg_cache *first,
+		uint32_t reg_num, bool search_all);
 struct reg *register_get_by_name(struct reg_cache *first,
 		const char *name, bool search_all);
 struct reg_cache **register_get_last_cache_p(struct reg_cache **first);
