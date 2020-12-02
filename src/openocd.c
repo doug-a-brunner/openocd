@@ -246,10 +246,7 @@ static int openocd_register_commands(struct command_context *cmd_ctx)
 
 struct command_context *global_cmd_ctx;
 
-/* NB! this fn can be invoked outside this file for non PC hosted builds
- * NB! do not change to 'static'!!!!
- */
-struct command_context *setup_command_handler(Jim_Interp *interp)
+static struct command_context *setup_command_handler(Jim_Interp *interp)
 {
 	log_init();
 	LOG_DEBUG("log_init: complete");
@@ -361,6 +358,8 @@ int openocd_main(int argc, char *argv[])
 	command_context_mode(cmd_ctx, COMMAND_CONFIG);
 	command_set_output_handler(cmd_ctx, configuration_output_handler, NULL);
 
+	server_host_os_entry();
+
 	/* Start the executable meat that can evolve into thread in future. */
 	ret = openocd_thread(argc, argv, cmd_ctx);
 
@@ -375,6 +374,8 @@ int openocd_main(int argc, char *argv[])
 	arm_cti_cleanup_all();
 
 	adapter_quit();
+
+	server_host_os_close();
 
 	/* Shutdown commandline interface */
 	command_exit(cmd_ctx);
